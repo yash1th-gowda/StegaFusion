@@ -39,7 +39,36 @@ def apply_dwt(channel: np.ndarray):
         "HL": HL,
         "HH": HH
     }
+# ==========================================================
+# APPLY INVERSE DWT
+# ==========================================================
 
+def apply_inverse_dwt(bands: dict) -> np.ndarray:
+    """
+    Reconstruct image using inverse Haar DWT.
+
+    Args:
+        bands:
+            Dictionary containing
+            LL, LH, HL, HH.
+
+    Returns:
+        Reconstructed image.
+    """
+
+    reconstructed = pywt.idwt2(
+        (
+            bands["LL"],
+            (
+                bands["LH"],
+                bands["HL"],
+                bands["HH"]
+            )
+        ),
+        "haar"
+    )
+
+    return reconstructed
 
 # ==========================================================
 # NORMALIZE BAND
