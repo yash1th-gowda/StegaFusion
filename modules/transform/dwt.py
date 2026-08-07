@@ -2,8 +2,7 @@
 ------------------------------------------------------------
 StegaFusion DWT Module
 ------------------------------------------------------------
-Reads a frame, separates RGB channels,
-and prepares the Blue channel for Haar DWT.
+Applies one-level Haar DWT to the Blue channel of a video frame.
 
 Author      : Yashwanth Gowda M
 Version     : 1.0.0
@@ -16,18 +15,22 @@ import cv2
 import numpy as np
 
 from config.config import PathConfig
+from modules.transform.wavelet_utils import (
+    apply_dwt,
+    save_band
+)
 
 
 # ==========================================================
-# LOAD IMAGE
+# LOAD FRAME
 # ==========================================================
 
 def load_frame(frame_path: Path) -> np.ndarray:
     """
-    Loads an image frame.
+    Load an image frame.
 
     Args:
-        frame_path (Path)
+        frame_path (Path): Path to frame image.
 
     Returns:
         numpy.ndarray
@@ -49,10 +52,7 @@ def load_frame(frame_path: Path) -> np.ndarray:
 
 def split_channels(image: np.ndarray):
     """
-    Splits image into Blue, Green and Red channels.
-
-    Returns:
-        tuple
+    Split image into Blue, Green and Red channels.
     """
 
     blue, green, red = cv2.split(image)
@@ -61,50 +61,44 @@ def split_channels(image: np.ndarray):
 
 
 # ==========================================================
-# IMAGE INFORMATION
-# ==========================================================
-
-def image_information(image: np.ndarray):
-
-    height, width, channels = image.shape
-
-    return {
-        "Width": width,
-        "Height": height,
-        "Channels": channels,
-        "Datatype": image.dtype
-    }
-
-
-# ==========================================================
-# TEST
+# MAIN
 # ==========================================================
 
 if __name__ == "__main__":
 
     print("=" * 70)
-    print("StegaFusion DWT Preparation")
+    print("StegaFusion Haar DWT Test")
     print("=" * 70)
 
-    frame = PathConfig.FRAME_DIR / "frame_00000.png"
+    # Load first extracted frame
+    frame_path = PathConfig.FRAME_DIR / "frame_00000.png"
 
-    image = load_frame(frame)
+    image = load_frame(frame_path)
 
     blue, green, red = split_channels(image)
 
-    info = image_information(image)
+    # Apply Haar DWT
+    bands = apply_dwt(blue)
+
+    # Create output directory
+    dwt_output = PathConfig.TEMP_DIR / "dwt"
+    dwt_output.mkdir(parents=True, exist_ok=True)
+
+    # Save all bands
+    for band_name, band in bands.items():
+
+        save_path = dwt_output / f"{band_name}.png"
+
+        save_band(
+            band,
+            save_path
+        )
+
+        print(
+            f"{band_name:<3} "
+            f"Shape: {band.shape} "
+            f"Saved: {save_path.name}"
+        )
 
     print()
-
-    for key, value in info.items():
-        print(f"{key:<12}: {value}")
-
-    print()
-
-    print(f"Blue Shape   : {blue.shape}")
-    print(f"Green Shape  : {green.shape}")
-    print(f"Red Shape    : {red.shape}")
-
-    print()
-
-    print("Frame Successfully Prepared For DWT")
+    print("Haar DWT Completed Successfully!")
