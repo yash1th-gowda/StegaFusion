@@ -1,183 +1,136 @@
 """
 ------------------------------------------------------------
-StegaFusion Adaptive LSB Module
+StegaFusion Adaptive LSB Engine
 ------------------------------------------------------------
-Provides adaptive LSB embedding and extraction
-for DWT coefficients.
+Implements adaptive embedding and extraction using
+an edge map generated from DWT coefficients.
 
 Author      : Yashwanth Gowda M
-Version     : 1.0.0
+Version     : 2.0.0
 Created     : August 2026
 ------------------------------------------------------------
 """
 
 import numpy as np
 
+from modules.steganography.lsb_utils import (
+    coefficient_to_int,
+    coefficient_to_float,
+    embed_one_bit,
+    embed_two_bits,
+    extract_one_bit,
+    extract_two_bits,
+)
+
 
 # ==========================================================
 # EMBEDDING CAPACITY
 # ==========================================================
 
-def get_capacity(edge_map: np.ndarray) -> int:
+def calculate_capacity(edge_map: np.ndarray) -> int:
     """
-    Calculate total embedding capacity.
+    Calculate embedding capacity.
 
-    Edge pixel   -> 2 bits
-    Smooth pixel -> 1 bit
+    Smooth coefficient -> 1 bit
+    Edge coefficient   -> 2 bits
     """
 
     edge_pixels = np.count_nonzero(edge_map)
+    smooth_pixels = edge_map.size - edge_pixels
 
-    total_pixels = edge_map.size
-
-    smooth_pixels = total_pixels - edge_pixels
-
-    capacity = edge_pixels * 2 + smooth_pixels
-
-    return capacity
+    return edge_pixels * 2 + smooth_pixels
 
 
 # ==========================================================
-# EMBED SINGLE COEFFICIENT
+# EMBEDDING
 # ==========================================================
 
-def embed_coefficient(
-    coefficient: float,
-    bits: str
-) -> float:
-    """
-    Embed 1 or 2 bits into a DWT coefficient.
-    """
-
-    value = int(round(coefficient))
-
-    number_of_bits = len(bits)
-
-    mask = (1 << number_of_bits) - 1
-
-    value &= ~mask
-
-    value |= int(bits, 2)
-
-    return float(value)
-
-
-# ==========================================================
-# EXTRACT SINGLE COEFFICIENT
-# ==========================================================
-
-def extract_coefficient(
-    coefficient: float,
-    bit_count: int
-) -> str:
-    """
-    Extract embedded bits from one coefficient.
-    """
-
-    value = int(round(coefficient))
-
-    mask = (1 << bit_count) - 1
-
-    extracted = value & mask
-
-    return format(extracted, f"0{bit_count}b")
-
-
-# ==========================================================
-# ADAPTIVE EMBEDDING
-# ==========================================================
-
-def embed_bits(
+def adaptive_embed(
     coefficients: np.ndarray,
     edge_map: np.ndarray,
-    payload_bits: str
+    payload_bits: str,
 ):
     """
     Adaptive LSB embedding.
 
-    Edge   -> 2 bits
-
-    Smooth -> 1 bit
+    Returns
+    -------
+    stego_coefficients
+    bits_embedded
     """
 
     stego = coefficients.copy()
 
     bit_index = 0
 
-    rows, cols = coefficients.shape
+    rows, cols = stego.shape
 
-    for i in range(rows):
+    for r in range(rows):
 
-        for j in range(cols):
+        for c in range(cols):
 
             if bit_index >= len(payload_bits):
-
                 return stego, bit_index
 
-            if edge_map[i, j] == 255:
+            value = coefficient_to_int(stego[r, c])
 
-                bit_count = 2
+            if edge_map[r, c] == 255:
+
+                bits = payload_bits[bit_index:bit_index + 2]
+
+                if len(bits) < 2:
+                    bits = bits.ljust(2, "0")
+
+                value = embed_two_bits(value, bits)
+
+                bit_index += 2
 
             else:
 
-                bit_count = 1
+                bits = payload_bits[bit_index]
 
-            bits = payload_bits[
-                bit_index:
-                bit_index + bit_count
-            ]
+                value = embed_one_bit(value, bits)
 
-            if len(bits) < bit_count:
+                bit_index += 1
 
-                bits = bits.ljust(bit_count, "0")
-
-            stego[i, j] = embed_coefficient(
-                stego[i, j],
-                bits
-            )
-
-            bit_index += bit_count
+            stego[r, c] = coefficient_to_float(value)
 
     return stego, bit_index
 
 
 # ==========================================================
-# ADAPTIVE EXTRACTION
+# EXTRACTION
 # ==========================================================
 
-def extract_bits(
+def adaptive_extract(
     coefficients: np.ndarray,
     edge_map: np.ndarray,
-    total_bits: int
+    total_bits: int,
 ):
     """
-    Recover embedded bits.
+    Recover payload bits from coefficients.
     """
 
     recovered = ""
 
     rows, cols = coefficients.shape
 
-    for i in range(rows):
+    for r in range(rows):
 
-        for j in range(cols):
+        for c in range(cols):
 
             if len(recovered) >= total_bits:
+                return recovered[:total_bits]
 
-                return recovered
+            value = coefficient_to_int(coefficients[r, c])
 
-            if edge_map[i, j] == 255:
+            if edge_map[r, c] == 255:
 
-                bit_count = 2
+                recovered += extract_two_bits(value)
 
             else:
 
-                bit_count = 1
-
-            recovered += extract_coefficient(
-                coefficients[i, j],
-                bit_count
-            )
+                recovered += extract_one_bit(value)
 
     return recovered[:total_bits]
 
@@ -189,15 +142,14 @@ def extract_bits(
 if __name__ == "__main__":
 
     print("=" * 70)
-    print("StegaFusion Adaptive LSB Test")
+    print("StegaFusion Adaptive LSB Engine Test")
     print("=" * 70)
 
     coeff = np.array(
         [
-            [101, 120],
-            [88, 43]
-        ],
-        dtype=float
+            [101.4, 88.7],
+            [55.2, 199.8]
+        ]
     )
 
     edge = np.array(
@@ -210,26 +162,24 @@ if __name__ == "__main__":
 
     payload = "110010"
 
-    print()
+    print(f"Capacity : {calculate_capacity(edge)} bits")
 
-    print("Capacity :", get_capacity(edge))
-
-    stego, used = embed_bits(
+    stego, embedded = adaptive_embed(
         coeff,
         edge,
         payload
     )
 
-    recovered = extract_bits(
+    recovered = adaptive_extract(
         stego,
         edge,
-        used
+        embedded
     )
 
-    print("Bits Embedded :", used)
+    print(f"Embedded : {embedded} bits")
+    print(f"Recovered: {recovered}")
 
-    print("Recovered     :", recovered)
-
-    print()
-
-    print("Adaptive LSB Test Successful!")
+    if recovered == payload:
+        print("\nAdaptive LSB Engine Passed!")
+    else:
+        print("\nAdaptive LSB Engine Failed!")
