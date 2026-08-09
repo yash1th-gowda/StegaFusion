@@ -1,3 +1,27 @@
-git add .
-git commit -m "Cleaned Python cache and updated gitignore"
-git push
+# Python
+__pycache__/
+*.py[cod]
+*.class
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Test keys and secrets
+input/keys/*.bin
+input/secret_data/
+
+# Generated temporary files
+temp/
+
+# Generated outputs
+output/
+
+# IDE / editor
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db

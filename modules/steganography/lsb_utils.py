@@ -23,8 +23,8 @@ Version     : 1.0.0
 # reconstruction errors, at the cost of slightly larger
 # coefficient modifications.
 #
-# Start conservatively with 4.
-QUANTIZATION_STEP: int = 4
+# Start conservatively with 1.
+QUANTIZATION_STEP: int = 1
 
 
 # ==========================================================

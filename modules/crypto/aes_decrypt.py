@@ -2,12 +2,14 @@
 ------------------------------------------------------------
 StegaFusion AES Decryption Module
 ------------------------------------------------------------
-Decrypts AES-256 CBC encrypted ciphertext.
+Provides AES-256 CBC decryption for text and binary files.
 
-Author      : Yashwanth Gowda M
-Version     : 1.0.0
+Author     : Yashwanth Gowda M
+Version    : 1.0.0
 ------------------------------------------------------------
 """
+
+from pathlib import Path
 
 from Crypto.Cipher import AES
 
@@ -15,83 +17,166 @@ from modules.crypto.crypto_utils import (
     decode_base64,
     unpad_data,
 )
+from modules.crypto.key_manager import load_key
 
 
 # ==========================================================
-# AES DECRYPTION
+# TEXT DECRYPTION
 # ==========================================================
 
-def decrypt(ciphertext: str, key: bytes, iv: bytes) -> str:
+def decrypt(
+    ciphertext: str,
+    key: bytes,
+    iv: bytes
+) -> str:
     """
-    Decrypt AES-256 CBC encrypted ciphertext.
-
-    Args:
-        ciphertext (str): Base64 encoded ciphertext.
-        key (bytes): AES-256 key.
-        iv (bytes): Initialization Vector.
-
-    Returns:
-        str: Original plaintext.
+    Decrypt Base64 encoded AES ciphertext.
     """
 
-    # Decode Base64
-    encrypted_bytes = decode_base64(ciphertext)
+    encrypted_bytes = decode_base64(
+        ciphertext
+    )
 
-    # Create AES Cipher
+    plaintext = decrypt_bytes(
+        encrypted_bytes,
+        key,
+        iv
+    )
+
+    return plaintext.decode("utf-8")
+
+
+# ==========================================================
+# BINARY DECRYPTION
+# ==========================================================
+
+def decrypt_bytes(
+    ciphertext: bytes,
+    key: bytes,
+    iv: bytes
+) -> bytes:
+    """
+    Decrypt arbitrary binary data using AES-256 CBC.
+    """
+
     cipher = AES.new(
         key,
         AES.MODE_CBC,
         iv
     )
 
-    # Decrypt
-    padded_plaintext = cipher.decrypt(encrypted_bytes)
+    padded_plaintext = cipher.decrypt(
+        ciphertext
+    )
 
-    # Remove PKCS7 Padding
-    plaintext = unpad_data(padded_plaintext)
-
-    return plaintext.decode("utf-8")
+    return unpad_data(
+        padded_plaintext
+    )
 
 
 # ==========================================================
-# TESTING
+# FILE PAYLOAD DECRYPTION
+# ==========================================================
+
+def decrypt_file(
+    encrypted_data: bytes,
+    key_file: Path
+) -> bytes:
+    """
+    Decrypt an encrypted file payload.
+
+    Expected format:
+
+        IV + Ciphertext
+    """
+
+    key_file = Path(key_file)
+
+    if not key_file.exists():
+        raise FileNotFoundError(
+            f"AES key not found: {key_file}"
+        )
+
+    if len(encrypted_data) <= 16:
+        raise ValueError(
+            "Encrypted payload is too small."
+        )
+
+    key = load_key(
+        key_file.name
+    )
+
+    if len(key) != 32:
+        raise ValueError(
+            "Invalid AES-256 key size."
+        )
+
+    iv = encrypted_data[:16]
+
+    ciphertext = encrypted_data[16:]
+
+    return decrypt_bytes(
+        ciphertext,
+        key,
+        iv
+    )
+
+
+# ==========================================================
+# TEST
 # ==========================================================
 
 if __name__ == "__main__":
 
-    from modules.crypto.key_manager import generate_key
-    from modules.crypto.crypto_utils import generate_iv
-    from modules.crypto.aes_encrypt import encrypt
-
     print("=" * 70)
-    print("StegaFusion AES Decryption Test")
+    print("StegaFusion AES File Decryption Test")
     print("=" * 70)
 
-    original_message = "Hello StegaFusion!"
+    from modules.crypto.key_manager import (
+        generate_key,
+        save_key,
+    )
 
-    key = generate_key()
+    test_key = generate_key()
+
+    save_key(
+        test_key,
+        "test_aes_key.bin"
+    )
+
+    original_data = (
+        b"StegaFusion binary encryption test."
+    )
+
+    from modules.crypto.aes_encrypt import (
+        encrypt_bytes
+    )
+    from modules.crypto.crypto_utils import (
+        generate_iv
+    )
+
     iv = generate_iv()
 
-    encrypted = encrypt(
-        plaintext=original_message,
-        key=key,
-        iv=iv
+    ciphertext = encrypt_bytes(
+        original_data,
+        test_key,
+        iv
     )
 
-    decrypted = decrypt(
-        ciphertext=encrypted,
-        key=key,
-        iv=iv
+    encrypted_payload = iv + ciphertext
+
+    recovered = decrypt_file(
+        encrypted_payload,
+        Path("input/keys/test_aes_key.bin")
     )
 
-    print(f"Original Message : {original_message}")
     print()
-    print(f"Encrypted Text   : {encrypted}")
-    print()
-    print(f"Decrypted Text   : {decrypted}")
+    print(f"Original Size : {len(original_data)} bytes")
+    print(f"Encrypted Size: {len(encrypted_payload)} bytes")
+    print(f"Recovered Size: {len(recovered)} bytes")
     print()
 
-    if original_message == decrypted:
-        print("AES Encryption and Decryption Successful!")
+    if recovered == original_data:
+        print("AES File Decryption Test Passed!")
     else:
-        print("Decryption Failed!")
+        print("AES File Decryption Test Failed!")

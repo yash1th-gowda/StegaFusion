@@ -105,6 +105,91 @@ def payload_size(data: bytes) -> int:
 
     return len(data)
 
+# ==========================================================
+# CREATE PAYLOAD PACKET
+# ==========================================================
+
+def create_payload_packet(data: bytes) -> str:
+    """
+    Creates a binary payload packet containing:
+
+        32-bit payload length
+        +
+        encrypted payload
+
+    Args:
+        data (bytes): Encrypted payload.
+
+    Returns:
+        str: Binary payload packet.
+    """
+
+    payload_bits = bytes_to_binary(data)
+
+    payload_length = len(payload_bits)
+
+    if payload_length > 0xFFFFFFFF:
+        raise ValueError(
+            "Payload is too large for the 32-bit length header."
+        )
+
+    length_header = format(
+        payload_length,
+        "032b"
+    )
+
+    return length_header + payload_bits
+
+
+# ==========================================================
+# PARSE PAYLOAD PACKET
+# ==========================================================
+
+def parse_payload_packet(
+    packet: str
+) -> tuple[int, str]:
+    """
+    Extracts the payload length and payload bits
+    from a binary payload packet.
+
+    Args:
+        packet (str): Complete binary payload packet.
+
+    Returns:
+        tuple[int, str]:
+            Payload length in bits.
+            Payload binary data.
+    """
+
+    if len(packet) < 32:
+        raise ValueError(
+            "Payload packet is too small."
+        )
+
+    length_header = packet[:32]
+
+    payload_length = int(
+        length_header,
+        2
+    )
+
+    payload_start = 32
+
+    payload_end = (
+        payload_start +
+        payload_length
+    )
+
+    if len(packet) < payload_end:
+        raise ValueError(
+            "Incomplete payload packet."
+        )
+
+    payload_bits = packet[
+        payload_start:payload_end
+    ]
+
+    return payload_length, payload_bits
 
 # ==========================================================
 # TESTING
@@ -118,16 +203,103 @@ if __name__ == "__main__":
 
     sample_data = b"Hello StegaFusion!"
 
-    binary = bytes_to_binary(sample_data)
+    # ------------------------------------------------------
+    # Bytes → Binary
+    # ------------------------------------------------------
 
-    recovered = binary_to_bytes(binary)
+    binary = bytes_to_binary(
+        sample_data
+    )
 
-    print(f"Original Data      : {sample_data}")
-    print(f"Payload Size       : {payload_size(sample_data)} bytes")
-    print(f"Binary Length      : {len(binary)} bits")
-    print(f"Recovered Data     : {recovered}")
+    # ------------------------------------------------------
+    # Binary → Bytes
+    # ------------------------------------------------------
 
-    if sample_data == recovered:
-        print("\nPayload Module Test Passed!")
+    recovered = binary_to_bytes(
+        binary
+    )
+
+    # ------------------------------------------------------
+    # Create Payload Packet
+    # ------------------------------------------------------
+
+    packet = create_payload_packet(
+        sample_data
+    )
+
+    # ------------------------------------------------------
+    # Parse Payload Packet
+    # ------------------------------------------------------
+
+    length, recovered_bits = parse_payload_packet(
+        packet
+    )
+
+    packet_recovered = binary_to_bytes(
+        recovered_bits
+    )
+
+    # ------------------------------------------------------
+    # Display Results
+    # ------------------------------------------------------
+
+    print()
+
+    print(
+        f"Original Data       : {sample_data}"
+    )
+
+    print(
+        f"Payload Size        : "
+        f"{payload_size(sample_data)} bytes"
+    )
+
+    print(
+        f"Binary Length       : "
+        f"{len(binary)} bits"
+    )
+
+    print(
+        f"Packet Length       : "
+        f"{len(packet)} bits"
+    )
+
+    print(
+        f"Header Length       : 32 bits"
+    )
+
+    print(
+        f"Payload Length      : "
+        f"{length} bits"
+    )
+
+    print(
+        f"Recovered Data      : {recovered}"
+    )
+
+    print(
+        f"Packet Recovered    : "
+        f"{packet_recovered}"
+    )
+
+    # ------------------------------------------------------
+    # Validation
+    # ------------------------------------------------------
+
+    if (
+        sample_data == recovered
+        and
+        sample_data == packet_recovered
+        and
+        length == len(binary)
+    ):
+
+        print(
+            "\nPayload Module Test Passed!"
+        )
+
     else:
-        print("\nPayload Module Test Failed!")
+
+        print(
+            "\nPayload Module Test Failed!"
+        )
