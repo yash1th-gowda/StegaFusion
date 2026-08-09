@@ -2,15 +2,29 @@
 ------------------------------------------------------------
 StegaFusion LSB Utilities
 ------------------------------------------------------------
-Provides low-level bit manipulation functions for
-Adaptive LSB embedding.
+Provides robust quantization-based bit manipulation
+functions for adaptive DWT-domain steganography.
+
+The API is intentionally kept compatible with
+adaptive_lsb.py.
 
 Author      : Yashwanth Gowda M
 Version     : 1.0.0
 ------------------------------------------------------------
 """
 
-import numpy as np
+# ==========================================================
+# QUANTIZATION SETTINGS
+# ==========================================================
+
+# Distance between adjacent embedding states.
+#
+# A larger value improves robustness against DWT/image
+# reconstruction errors, at the cost of slightly larger
+# coefficient modifications.
+#
+# Start conservatively with 4.
+QUANTIZATION_STEP: int = 4
 
 
 # ==========================================================
@@ -19,60 +33,175 @@ import numpy as np
 
 def coefficient_to_int(value: float) -> int:
     """
-    Convert DWT coefficient to integer.
+    Convert a DWT coefficient to the nearest integer.
     """
+
     return int(round(value))
 
 
 def coefficient_to_float(value: int) -> float:
     """
-    Convert integer back to float.
+    Convert an integer embedding value back to float.
     """
+
     return float(value)
+
+
+# ==========================================================
+# INTERNAL QUANTIZATION
+# ==========================================================
+
+def _nearest_multiple(
+    value: int,
+    step: int
+) -> int:
+    """
+    Return the nearest multiple of `step`.
+    """
+
+    return int(
+        round(value / step)
+    ) * step
 
 
 # ==========================================================
 # EMBED ONE BIT
 # ==========================================================
 
-def embed_one_bit(value: int, bit: str) -> int:
+def embed_one_bit(
+    value: int,
+    bit: str
+) -> int:
+    """
+    Embed one bit using two quantization states.
 
-    value &= ~1
+    State 0:
+        multiple of 8
 
-    value |= int(bit)
+    State 1:
+        multiple of 8 + 4
 
-    return value
+    Therefore adjacent logical states are separated
+    by QUANTIZATION_STEP.
+    """
+
+    if bit not in ("0", "1"):
+        raise ValueError(
+            "Bit must be '0' or '1'."
+        )
+
+    step = QUANTIZATION_STEP
+
+    # Two states require a period of 2 * step.
+    period = step * 2
+
+    base = (
+        round(value / period)
+        * period
+    )
+
+    if bit == "0":
+        return int(base)
+
+    return int(base + step)
 
 
 # ==========================================================
 # EMBED TWO BITS
 # ==========================================================
 
-def embed_two_bits(value: int, bits: str) -> int:
+def embed_two_bits(
+    value: int,
+    bits: str
+) -> int:
+    """
+    Embed two bits using four quantization states.
 
-    value &= ~3
+    States:
 
-    value |= int(bits, 2)
+        00 -> 0
+        01 -> step
+        10 -> 2 * step
+        11 -> 3 * step
+    """
 
-    return value
+    if len(bits) != 2:
+        raise ValueError(
+            "Exactly two bits are required."
+        )
+
+    if any(bit not in "01" for bit in bits):
+        raise ValueError(
+            "Bits must contain only '0' and '1'."
+        )
+
+    state = int(
+        bits,
+        2
+    )
+
+    step = QUANTIZATION_STEP
+
+    period = step * 4
+
+    base = (
+        round(value / period)
+        * period
+    )
+
+    return int(
+        base + state * step
+    )
 
 
 # ==========================================================
 # EXTRACT ONE BIT
 # ==========================================================
 
-def extract_one_bit(value: int) -> str:
+def extract_one_bit(
+    value: int
+) -> str:
+    """
+    Extract one bit from a quantized coefficient.
 
-    return str(value & 1)
+    The coefficient is mapped to the nearest quantization
+    state before decoding.
+    """
+
+    step = QUANTIZATION_STEP
+
+    state = int(
+        round(value / step)
+    )
+
+    return str(
+        state % 2
+    )
 
 
 # ==========================================================
 # EXTRACT TWO BITS
 # ==========================================================
 
-def extract_two_bits(value: int) -> str:
+def extract_two_bits(
+    value: int
+) -> str:
+    """
+    Extract two bits from a quantized coefficient.
+    """
 
-    return format(value & 3, "02b")
+    step = QUANTIZATION_STEP
+
+    state = int(
+        round(value / step)
+    )
+
+    state %= 4
+
+    return format(
+        state,
+        "02b"
+    )
 
 
 # ==========================================================
@@ -81,36 +210,102 @@ def extract_two_bits(value: int) -> str:
 
 if __name__ == "__main__":
 
-    print("=" * 60)
-    print("StegaFusion LSB Utility Test")
-    print("=" * 60)
-
-    value = 155
+    print("=" * 70)
+    print("StegaFusion Robust LSB Utility Test")
+    print("=" * 70)
 
     print()
-
-    print("Original :", value)
-
-    one = embed_one_bit(value, "1")
-
-    print("1-bit :", one)
-
-    two = embed_two_bits(value, "10")
-
-    print("2-bit :", two)
-
-    print()
-
     print(
-        "Extract 1:",
-        extract_one_bit(one)
+        f"Quantization Step : "
+        f"{QUANTIZATION_STEP}"
     )
 
-    print(
-        "Extract 2:",
-        extract_two_bits(two)
-    )
+    # ------------------------------------------------------
+    # One-bit tests
+    # ------------------------------------------------------
+
+    test_values = [
+        -20,
+        -7,
+        -1,
+        0,
+        3,
+        10,
+        17,
+        25,
+        100,
+    ]
 
     print()
+    print("One-Bit Tests")
+    print("-" * 70)
 
-    print("LSB Utility Test Passed!")
+    for value in test_values:
+
+        for bit in ("0", "1"):
+
+            embedded = embed_one_bit(
+                value,
+                bit
+            )
+
+            recovered = extract_one_bit(
+                embedded
+            )
+
+            print(
+                f"Value={value:4d} "
+                f"Bit={bit} "
+                f"Embedded={embedded:5d} "
+                f"Recovered={recovered}"
+            )
+
+            if recovered != bit:
+
+                raise AssertionError(
+                    "One-bit embedding test failed."
+                )
+
+    # ------------------------------------------------------
+    # Two-bit tests
+    # ------------------------------------------------------
+
+    print()
+    print("Two-Bit Tests")
+    print("-" * 70)
+
+    for value in test_values:
+
+        for bits in (
+            "00",
+            "01",
+            "10",
+            "11"
+        ):
+
+            embedded = embed_two_bits(
+                value,
+                bits
+            )
+
+            recovered = extract_two_bits(
+                embedded
+            )
+
+            print(
+                f"Value={value:4d} "
+                f"Bits={bits} "
+                f"Embedded={embedded:5d} "
+                f"Recovered={recovered}"
+            )
+
+            if recovered != bits:
+
+                raise AssertionError(
+                    "Two-bit embedding test failed."
+                )
+
+    print()
+    print(
+        "Robust LSB Utility Test Passed!"
+    )
