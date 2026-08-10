@@ -305,8 +305,9 @@ def main():
     # video frame.
     # ------------------------------------------------------
 
-    reconstructed_blue = np.clip(
-        np.rint(reconstructed_blue),
+    reconstructed_blue = np.round(
+        reconstructed_blue
+    ).clip(
         0,
         255
     ).astype(np.uint8)

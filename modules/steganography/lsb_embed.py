@@ -103,8 +103,9 @@ if __name__ == "__main__":
         bands
     )
 
-    reconstructed = np.clip(
-        reconstructed,
+    reconstructed = np.round(
+        reconstructed
+    ).clip(
         0,
         255
     ).astype(np.uint8)
