@@ -4,9 +4,6 @@ StegaFusion Spatial Paired-Block Steganography
 MP4-resistant spatial-domain embedding.
 """
 
-from pathlib import Path
-
-import cv2
 import numpy as np
 
 
@@ -31,27 +28,37 @@ def get_block_pairs(
     gap: int = GAP,
 ):
     """
-    Generate horizontal paired blocks.
+    Generate non-overlapping horizontal paired blocks.
 
     Each pair is:
 
         [ Block A ][ GAP ][ Block B ]
 
     One payload bit is stored per pair.
+
+    Pairs do not overlap each other.
     """
 
     pairs = []
 
     rows = height // block_size
-    cols = (width - gap) // block_size
+
+    pair_width = (
+        block_size
+        + gap
+        + block_size
+    )
+
+    pairs_per_row = width // pair_width
 
     for row in range(rows):
-        for col in range(0, cols - 1, 2):
 
-            y1 = row * block_size
-            y2 = y1 + block_size
+        y1 = row * block_size
+        y2 = y1 + block_size
 
-            x1 = col * block_size
+        for pair_index in range(pairs_per_row):
+
+            x1 = pair_index * pair_width
             x2 = x1 + block_size
 
             right_x1 = x2 + gap
@@ -62,8 +69,18 @@ def get_block_pairs(
 
             pairs.append(
                 (
-                    (y1, y2, x1, x2),
-                    (y1, y2, right_x1, right_x2),
+                    (
+                        y1,
+                        y2,
+                        x1,
+                        x2,
+                    ),
+                    (
+                        y1,
+                        y2,
+                        right_x1,
+                        right_x2,
+                    ),
                 )
             )
 
@@ -269,13 +286,13 @@ def _extract_bit(
     )
 
     left_change = (
-        stego_left -
-        original_left
+        stego_left
+        - original_left
     )
 
     right_change = (
-        stego_right -
-        original_right
+        stego_right
+        - original_right
     )
 
     if left_change > right_change:

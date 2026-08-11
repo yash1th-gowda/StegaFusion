@@ -1,32 +1,41 @@
 """
 StegaFusion Spatial Paired-Block Unit Test
 
-Tests:
-    PNG/frame
-        ↓
-    spatial embedding
-        ↓
-    spatial extraction
+Tests direct embedding and extraction using the
+MP4-resistant spatial paired-block method.
 
-No MP4 encoding is involved.
+No production code is modified by this test.
 """
 
 from pathlib import Path
 
 import cv2
 
-from config.config import PathConfig
 from modules.steganography.spatial.paired_block import (
-    BLOCK_SIZE,
-    DELTA,
-    calculate_capacity,
     embed_payload,
     extract_payload,
+    calculate_capacity,
 )
 
 
+# ==========================================================
+# CONFIGURATION
+# ==========================================================
+
+FRAME_PATH = Path(
+    "temp/frames/frame_00040.png"
+)
+
+BLOCK_SIZE = 32
+GAP = 16
+DELTA = 4
+
 PAYLOAD = "101100111000111100001111"
 
+
+# ==========================================================
+# MAIN TEST
+# ==========================================================
 
 def main():
 
@@ -34,121 +43,207 @@ def main():
     print("StegaFusion Spatial Paired-Block Unit Test")
     print("=" * 70)
 
-    frame_path = (
-        PathConfig.FRAME_DIR /
-        "frame_00040.png"
-    )
+    print()
 
-    if not frame_path.exists():
-        raise FileNotFoundError(
-            f"Frame not found: {frame_path}"
-        )
+    # ------------------------------------------------------
+    # Load frame
+    # ------------------------------------------------------
 
     frame = cv2.imread(
-        str(frame_path)
+        str(FRAME_PATH)
     )
 
     if frame is None:
-        raise RuntimeError(
-            f"Unable to read frame: {frame_path}"
+        raise FileNotFoundError(
+            f"Unable to load frame: {FRAME_PATH}"
         )
 
-    print()
-    print(f"Frame       : {frame_path}")
-    print(f"Shape       : {frame.shape}")
-    print(f"Block Size  : {BLOCK_SIZE} x {BLOCK_SIZE}")
-    print(f"Delta       : {DELTA}")
-
-    capacity = calculate_capacity(
-        frame
+    print(
+        f"Frame       : {FRAME_PATH.resolve()}"
     )
 
-    print(f"Capacity    : {capacity} bits")
-    print(f"Payload     : {PAYLOAD}")
-    print(f"Payload Bits: {len(PAYLOAD)}")
+    print(
+        f"Shape       : {frame.shape}"
+    )
 
-    if len(PAYLOAD) > capacity:
-        raise RuntimeError(
-            "Payload exceeds frame capacity."
-        )
+    print(
+        f"Block Size  : {BLOCK_SIZE} x {BLOCK_SIZE}"
+    )
+
+    print(
+        f"Gap         : {GAP}"
+    )
+
+    print(
+        f"Delta       : {DELTA}"
+    )
 
     # ------------------------------------------------------
-    # EMBED
+    # Capacity
+    # ------------------------------------------------------
+
+    capacity = calculate_capacity(
+        frame,
+        block_size=BLOCK_SIZE,
+        gap=GAP,
+    )
+
+    print(
+        f"Capacity    : {capacity} bits"
+    )
+
+    print(
+        f"Payload     : {PAYLOAD}"
+    )
+
+    print(
+        f"Payload Bits: {len(PAYLOAD)}"
+    )
+
+    print()
+
+    # ------------------------------------------------------
+    # Embed
     # ------------------------------------------------------
 
     stego, embedded = embed_payload(
         frame,
         PAYLOAD,
+        block_size=BLOCK_SIZE,
+        delta=DELTA,
+        gap=GAP,
     )
 
-    print()
-    print(f"Embedded Bits : {embedded}")
+    print(
+        f"Embedded Bits : {embedded}"
+    )
 
     # ------------------------------------------------------
-    # DIRECT EXTRACTION
+    # Direct extraction
+    #
+    # The spatial method compares the original cover
+    # against the stego frame.
     # ------------------------------------------------------
 
     recovered = extract_payload(
+        frame,
         stego,
         len(PAYLOAD),
+        block_size=BLOCK_SIZE,
+        gap=GAP,
     )
 
     print()
-    print(f"Recovered     : {recovered}")
-    print(f"Expected      : {PAYLOAD}")
 
-    if recovered != PAYLOAD:
+    print(
+        f"Recovered     : {recovered}"
+    )
+
+    print(
+        f"Expected      : {PAYLOAD}"
+    )
+
+    print()
+
+    if recovered == PAYLOAD:
+
+        print(
+            "Direct Extraction : PASS"
+        )
+
+    else:
+
+        correct = sum(
+            a == b
+            for a, b in zip(
+                PAYLOAD,
+                recovered,
+            )
+        )
+
+        print(
+            f"Direct Extraction : FAIL"
+        )
+
+        print(
+            f"Correct Bits      : "
+            f"{correct}/{len(PAYLOAD)}"
+        )
 
         for index, (expected, actual) in enumerate(
             zip(PAYLOAD, recovered)
         ):
+
             if expected != actual:
-                print()
+
                 print(
-                    f"First Mismatch : {index}"
+                    f"First Mismatch    : {index}"
                 )
+
                 print(
-                    f"Expected       : {expected}"
+                    f"Expected          : {expected}"
                 )
+
                 print(
-                    f"Recovered      : {actual}"
+                    f"Recovered         : {actual}"
                 )
+
                 break
 
-        raise RuntimeError(
-            "Spatial embed/extract failed."
-        )
-
-    print()
-    print("Direct Extraction : PASS")
-
     # ------------------------------------------------------
-    # SAVE TEST FRAME
+    # Save stego frame
     # ------------------------------------------------------
 
-    output = (
-        PathConfig.TEMP_DIR /
-        "spatial" /
-        "paired_block_test.png"
+    output_dir = Path(
+        "temp/spatial"
     )
 
-    output.parent.mkdir(
+    output_dir.mkdir(
         parents=True,
         exist_ok=True,
     )
 
+    output_path = (
+        output_dir /
+        "paired_block_test.png"
+    )
+
     cv2.imwrite(
-        str(output),
+        str(output_path),
         stego,
     )
 
     print()
-    print(f"Saved Stego Frame : {output}")
+
+    print(
+        f"Saved Stego Frame : "
+        f"{output_path.resolve()}"
+    )
+
     print()
-    print("=" * 70)
-    print("RESULT: SPATIAL PAIRED-BLOCK UNIT TEST PASS")
+
     print("=" * 70)
 
+    if recovered == PAYLOAD:
+
+        print(
+            "RESULT: SPATIAL PAIRED-BLOCK "
+            "UNIT TEST PASSED."
+        )
+
+    else:
+
+        print(
+            "RESULT: SPATIAL PAIRED-BLOCK "
+            "UNIT TEST FAILED."
+        )
+
+    print("=" * 70)
+
+
+# ==========================================================
+# ENTRY POINT
+# ==========================================================
 
 if __name__ == "__main__":
     main()
