@@ -1,7 +1,8 @@
 """
-StegaFusion Spatial Multi-Frame MP4 End-to-End Pipeline Test
+StegaFusion Real Multi-Frame Spatial MP4 End-to-End Test
 
-Workflow:
+Uses a real secret file and real AES encryption to verify that
+the production spatial video pipeline can:
 
     Secret File
         ↓
@@ -11,24 +12,23 @@ Workflow:
         ↓
     Multi-Frame Chunking
         ↓
-    Frame Packet Creation
+    Frame Packets
         ↓
-    Spatial Paired-Block Embedding
+    Spatial Embedding
         ↓
     ONE MP4V VIDEO
         ↓
     Multi-Frame Extraction
         ↓
-    Packet Parsing
-        ↓
     Chunk Reassembly
+        ↓
+    Payload Parsing
         ↓
     AES Decryption
         ↓
-    Recovered Secret File
+    Original Secret File
 
-This test does not modify the production
-steganography algorithm.
+This test does not modify production steganography code.
 """
 
 from pathlib import Path
@@ -55,7 +55,7 @@ COVER_VIDEO = Path(
 )
 
 SECRET_FILE = Path(
-    "input/secret_data/test_secret.txt"
+    "input/secret_data/multiframe_1kb_secret.bin"
 )
 
 KEY_FILE = Path(
@@ -63,17 +63,17 @@ KEY_FILE = Path(
 )
 
 OUTPUT_DIR = Path(
-    "output/video_spatial_pipeline"
+    "output/video_spatial_multiframe_real_1kb"
 )
 
 OUTPUT_VIDEO = (
     OUTPUT_DIR /
-    "multiframe_spatial_stego.mp4"
+    "multiframe_1kb_stego.mp4"
 )
 
 RECOVERED_FILE = (
     OUTPUT_DIR /
-    "recovered_test_secret.txt"
+    "recovered_multiframe_1kb_secret.bin"
 )
 
 
@@ -85,13 +85,13 @@ def main():
 
     print("=" * 70)
     print(
-        "StegaFusion Spatial Multi-Frame MP4 "
-        "End-to-End Pipeline Test"
+        "StegaFusion Real Multi-Frame Spatial MP4 "
+        "End-to-End Test"
     )
     print("=" * 70)
 
     # ------------------------------------------------------
-    # INPUT FILES
+    # INPUT VALIDATION
     # ------------------------------------------------------
 
     print()
@@ -117,12 +117,12 @@ def main():
         )
 
     # ------------------------------------------------------
-    # PAYLOAD
+    # PAYLOAD PREPARATION
     # ------------------------------------------------------
 
     print()
     print("=" * 70)
-    print("PAYLOAD PREPARATION")
+    print("REAL PAYLOAD PREPARATION")
     print("=" * 70)
 
     payload = prepare_spatial_payload(
@@ -135,6 +135,7 @@ def main():
     )
 
     print()
+
     print(
         f"Secret Size       : "
         f"{SECRET_FILE.stat().st_size} bytes"
@@ -146,18 +147,18 @@ def main():
     )
 
     print(
-        f"Frame Packets     : "
-        f"{len(packets)}"
-    )
-
-    print(
-        f"Max Chunk Data    : "
+        f"Maximum Chunk     : "
         f"{MAX_CHUNK_DATA_BITS} bits"
     )
 
     print(
-        f"Max Frame Packet  : "
+        f"Maximum Packet    : "
         f"{MAX_FRAME_BITS} bits"
+    )
+
+    print(
+        f"Frame Packets     : "
+        f"{len(packets)}"
     )
 
     print()
@@ -171,14 +172,21 @@ def main():
             f"{len(packet)} bits"
         )
 
+    # ------------------------------------------------------
+    # CRITICAL MULTI-FRAME CHECK
+    # ------------------------------------------------------
+
+    if len(packets) < 2:
+
+        raise RuntimeError(
+            "The test payload did not produce "
+            "multiple frame packets."
+        )
+
     print()
 
     print(
-        "AES + Payload Packet : PASS"
-    )
-
-    print(
-        "Multi-Frame Packet Creation : PASS"
+        "Real payload spans multiple frames : PASS"
     )
 
     # ------------------------------------------------------
@@ -210,17 +218,6 @@ def main():
     )
 
     print(
-        f"Resolution       : "
-        f"{embedding['width']} x "
-        f"{embedding['height']}"
-    )
-
-    print(
-        f"FPS              : "
-        f"{embedding['fps']}"
-    )
-
-    print(
         f"Video Frames     : "
         f"{embedding['frames']}"
     )
@@ -247,13 +244,20 @@ def main():
 
     print()
 
+    if embedding["packet_count"] < 2:
+
+        raise RuntimeError(
+            "Production pipeline did not create "
+            "multiple frame packets."
+        )
+
     if (
-        embedding["embedded_bits"]
-        <= 0
+        embedding["embedded_frames"]
+        != embedding["packet_count"]
     ):
 
         raise RuntimeError(
-            "No payload bits were embedded."
+            "Not all frame packets were embedded."
         )
 
     if not OUTPUT_VIDEO.exists():
@@ -263,11 +267,11 @@ def main():
         )
 
     print(
-        "Spatial Embedding : PASS"
+        "Multi-Frame Spatial Embedding : PASS"
     )
 
     print(
-        "Single MP4V Encoding : PASS"
+        "MP4V Encoding : PASS"
     )
 
     # ------------------------------------------------------
@@ -276,7 +280,7 @@ def main():
 
     print()
     print("=" * 70)
-    print("MULTI-FRAME SPATIAL MP4 EXTRACTION")
+    print("MULTI-FRAME SPATIAL EXTRACTION")
     print("=" * 70)
 
     extraction = extract_spatial_video(
@@ -312,7 +316,7 @@ def main():
     )
 
     # ------------------------------------------------------
-    # FILE COMPARISON
+    # BYTE-LEVEL VERIFICATION
     # ------------------------------------------------------
 
     print()
@@ -340,15 +344,16 @@ def main():
         f"{len(recovered_data)} bytes"
     )
 
-    print()
-
     if original_data != recovered_data:
 
+        print()
         print(
             "Original Match : FAIL"
         )
 
         raise SystemExit(1)
+
+    print()
 
     print(
         "Original Match : PASS"
@@ -361,8 +366,8 @@ def main():
     print()
     print("=" * 70)
     print(
-        "RESULT: MULTI-FRAME SPATIAL MP4 "
-        "END-TO-END PIPELINE PASSED."
+        "RESULT: REAL MULTI-FRAME SPATIAL MP4 "
+        "PIPELINE PASSED."
     )
     print("=" * 70)
 
@@ -381,7 +386,7 @@ def main():
     )
 
     print(
-        "Payload Chunking         : PASS"
+        "Multi-Frame Chunking     : PASS"
     )
 
     print(
