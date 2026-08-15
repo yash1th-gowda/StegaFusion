@@ -721,14 +721,18 @@ def extract_frame_packet(
     original_frame,
     received_frame,
     block_size: int = BLOCK_SIZE,
+    delta
+    : int = DELTA,
     gap: int = GAP,
 ):
     """
-    Extract the maximum safe frame packet.
+    Extract exactly one multi-frame packet.
 
-    The 64-bit header tells us the actual chunk length.
-    Therefore extracting MAX_FRAME_BITS is safe even for
-    the final shorter packet.
+    The 64-bit header contains the actual chunk length.
+    Therefore the extractor first reads the header and then
+    extracts exactly HEADER_BITS + chunk_length bits.
+
+    This is required for the final shorter packet.
     """
 
     capacity = get_spatial_capacity(
@@ -737,22 +741,93 @@ def extract_frame_packet(
         gap=gap,
     )
 
-    if capacity < MAX_FRAME_BITS:
-
+    if capacity < 64:
         raise ValueError(
-            "Frame capacity is too small for "
-            "the configured frame packet.\n"
+            "Frame capacity is too small for the 64-bit packet header.\n"
             f"Capacity: {capacity}\n"
-            f"Required: {MAX_FRAME_BITS}"
+            "Required: 64"
         )
 
-    return extract_spatial_payload(
+    header_bits = extract_spatial_payload(
         original_frame,
         received_frame,
-        MAX_FRAME_BITS,
+        64,
         block_size=block_size,
         gap=gap,
     )
+
+    if len(header_bits) != 64:
+        raise ValueError(
+            "Unable to extract complete packet header.\n"
+            f"Received: {len(header_bits)} bits\n"
+            "Required: 64 bits"
+        )
+
+    if header_bits[:16] != "1010101011001100":
+        raise ValueError("Invalid packet magic.")
+
+    version = int(header_bits[16:24], 2)
+    total_chunks = int(header_bits[24:36], 2)
+    chunk_index = int(header_bits[36:48], 2)
+    chunk_length = int(header_bits[48:64], 2)
+
+    if version != 1:
+        raise ValueError(
+            "Unsupported packet version.\n"
+            f"Version: {version}\n"
+            "Expected: 1"
+        )
+
+    if total_chunks <= 0:
+        raise ValueError("Invalid total_chunks in packet header.")
+
+    if chunk_index >= total_chunks:
+        raise ValueError(
+            "Invalid chunk_index.\n"
+            f"Chunk Index: {chunk_index}\n"
+            f"Total Chunks: {total_chunks}"
+        )
+
+    if chunk_length <= 0:
+        raise ValueError("Invalid chunk_length in packet header.")
+
+    packet_length = 64 + chunk_length
+
+    if packet_length > MAX_FRAME_BITS:
+        raise ValueError(
+            "Packet exceeds maximum frame packet size.\n"
+            f"Packet Length: {packet_length}\n"
+            f"Maximum: {MAX_FRAME_BITS}"
+        )
+
+    if packet_length > capacity:
+        raise ValueError(
+            "Packet exceeds spatial frame capacity.\n"
+            f"Packet Length: {packet_length}\n"
+            f"Capacity: {capacity}"
+        )
+
+    packet_bits = extract_spatial_payload(
+        original_frame,
+        received_frame,
+        packet_length,
+        block_size=block_size,
+        gap=gap,
+    )
+
+    if len(packet_bits) != packet_length:
+        raise ValueError(
+            "Extracted packet has incorrect length.\n"
+            f"Received: {len(packet_bits)} bits\n"
+            f"Expected: {packet_length} bits"
+        )
+
+    if packet_bits[:64] != header_bits:
+        raise ValueError(
+            "Packet header mismatch between header extraction and complete packet extraction."
+        )
+
+    return packet_bits
 
 
 # ==========================================================
@@ -765,6 +840,7 @@ def recover_secret_file(
     key_file: Path,
     output_file: Path,
     block_size: int = BLOCK_SIZE,
+    delta: int = DELTA,
     gap: int = GAP,
 ):
     """
@@ -797,6 +873,7 @@ def recover_secret_file(
         original_frames[0],
         received_frames[0],
         block_size=block_size,
+        delta=delta,
         gap=gap,
     )
 
@@ -840,6 +917,7 @@ def recover_secret_file(
             original_frames[frame_index],
             received_frames[frame_index],
             block_size=block_size,
+            delta=delta,
             gap=gap,
         )
 
@@ -917,6 +995,7 @@ def extract_spatial_video(
     output_file: Path,
     payload_bits: int = None,
     block_size: int = BLOCK_SIZE,
+    delta: int = DELTA,
     gap: int = GAP,
 ):
     """
@@ -978,6 +1057,7 @@ def extract_spatial_video(
         key_file,
         output_file,
         block_size=block_size,
+        delta=delta,
         gap=gap,
     )
 
