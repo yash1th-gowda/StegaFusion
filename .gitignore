@@ -25,3 +25,6 @@ output/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Large demo media
+input/cover_video/*.mp4
